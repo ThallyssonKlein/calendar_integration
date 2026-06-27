@@ -61,14 +61,16 @@ function syncCalendarEvents() {
     return event;
   });
 
-  var response = UrlFetchApp.fetch(CRUD_API_URL + '/events', {
+  var baseUrl = CRUD_API_URL.replace(/\/+$/, '');
+  var response = UrlFetchApp.fetch(baseUrl + '/events', {
     method: 'post',
     contentType: 'application/json',
     headers: {
       'Authorization': 'Bearer ' + API_TOKEN
     },
     payload: JSON.stringify(events),
-    muteHttpExceptions: true
+    muteHttpExceptions: true,
+    followRedirects: false
   });
 
   Logger.log('Status: ' + response.getResponseCode());
