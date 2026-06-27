@@ -133,6 +133,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token := os.Getenv("API_TOKEN")
+	if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	var req rpcRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeRPCError(w, nil, -32700, "parse error")

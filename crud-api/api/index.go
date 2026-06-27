@@ -85,9 +85,20 @@ var router = func() *http.ServeMux {
 	return m
 }()
 
+func authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := os.Getenv("API_TOKEN")
+		if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	router.ServeHTTP(w, r)
+	authMiddleware(router).ServeHTTP(w, r)
 }
 
 func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
