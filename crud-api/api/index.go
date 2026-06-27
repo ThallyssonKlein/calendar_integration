@@ -123,7 +123,18 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	result, err := c.BulkWrite(ctx, models)
+	upsertResult, err := c.BulkWrite(ctx, models)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	ids := make([]string, 0, len(events))
+	for _, e := range events {
+		ids = append(ids, e.GoogleID)
+	}
+
+	deleteResult, err := c.DeleteMany(ctx, bson.M{"id": bson.M{"$nin": ids}})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -131,9 +142,10 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"upsertedCount": result.UpsertedCount,
-		"modifiedCount": result.ModifiedCount,
-		"matchedCount":  result.MatchedCount,
+		"upsertedCount": upsertResult.UpsertedCount,
+		"modifiedCount": upsertResult.ModifiedCount,
+		"matchedCount":  upsertResult.MatchedCount,
+		"deletedCount":  deleteResult.DeletedCount,
 	})
 }
 
