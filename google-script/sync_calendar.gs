@@ -25,10 +25,16 @@ function syncCalendarEvents() {
   }
 
   var tz = Session.getScriptTimeZone();
-  var events = allGoogleEvents.map(function(e) {
-    var event = {
-      id: e.getId()
-    };
+  var seen = {};
+  var events = [];
+
+  for (var i = 0; i < allGoogleEvents.length; i++) {
+    var e = allGoogleEvents[i];
+    var eventId = e.getId();
+    if (seen[eventId]) continue;
+    seen[eventId] = true;
+
+    var event = { id: eventId };
 
     if (e.isAllDayEvent()) {
       event.start = { date: Utilities.formatDate(e.getStartTime(), tz, 'yyyy-MM-dd') };
@@ -55,11 +61,11 @@ function syncCalendarEvents() {
           displayName: g.getName() || '',
           responseStatus: mapGuestStatus(g.getGuestStatus())
         };
-      });
+      }).sort(function(a, b) { return a.email < b.email ? -1 : 1; });
     }
 
-    return event;
-  });
+    events.push(event);
+  }
 
   var baseUrl = CRUD_API_URL.replace(/\/+$/, '');
   var response = UrlFetchApp.fetch(baseUrl + '/events', {
