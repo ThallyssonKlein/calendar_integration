@@ -10,12 +10,17 @@ function syncCalendarEvents() {
   var endDate = new Date(now);
   endDate.setDate(endDate.getDate() + 30);
 
+  Logger.log('now: ' + now);
+  Logger.log('startDate: ' + startDate);
+  Logger.log('endDate: ' + endDate);
+
   var calendars = CalendarApp.getAllCalendars();
   var allGoogleEvents = [];
 
   for (var i = 0; i < calendars.length; i++) {
     var cal = calendars[i];
     var evts = cal.getEvents(startDate, endDate);
+    Logger.log('calendar: ' + cal.getName() + ' | events: ' + evts.length);
     allGoogleEvents = allGoogleEvents.concat(evts);
   }
 
@@ -31,10 +36,11 @@ function syncCalendarEvents() {
   for (var i = 0; i < allGoogleEvents.length; i++) {
     var e = allGoogleEvents[i];
     var eventId = e.getId();
-    if (seen[eventId]) continue;
-    seen[eventId] = true;
+    var instanceKey = eventId + '_' + e.getStartTime().getTime();
+    if (seen[instanceKey]) continue;
+    seen[instanceKey] = true;
 
-    var event = { id: eventId };
+    var event = { id: eventId + '_' + e.getStartTime().getTime() };
 
     if (e.isAllDayEvent()) {
       event.start = { date: Utilities.formatDate(e.getStartTime(), tz, 'yyyy-MM-dd') };
@@ -62,6 +68,10 @@ function syncCalendarEvents() {
           responseStatus: mapGuestStatus(g.getGuestStatus())
         };
       }).sort(function(a, b) { return a.email < b.email ? -1 : 1; });
+    }
+
+    if (event.start.date === '2026-06-29' || (event.start.dateTime && event.start.dateTime.startsWith('2026-06-29'))) {
+      Logger.log('DEBUG june29: ' + JSON.stringify(event));
     }
 
     events.push(event);
