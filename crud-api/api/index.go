@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 
@@ -124,6 +125,10 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "each event must have an 'id' field")
 			return
 		}
+		if !validEventID.MatchString(e.GoogleID) {
+			writeError(w, http.StatusBadRequest, "invalid event 'id' format")
+			return
+		}
 		m := mongo.NewUpdateOneModel().
 			SetFilter(bson.M{"id": e.GoogleID}).
 			SetUpdate(bson.M{"$set": e}).
@@ -159,6 +164,9 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 		"deletedCount":  deleteResult.DeletedCount,
 	})
 }
+
+// Google Calendar event IDs: base32hex chars, plus "_" and timestamp for recurring instances.
+var validEventID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,1024}$`)
 
 var schema = map[string]interface{}{
 	"$schema": "https://json-schema.org/draft/2020-12/schema",

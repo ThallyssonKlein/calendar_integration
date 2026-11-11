@@ -197,6 +197,12 @@ func handleToolCall(w http.ResponseWriter, req rpcRequest) {
 		writeRPCError(w, req.ID, -32602, "start_date and end_date are required")
 		return
 	}
+	for _, d := range []string{startDate, endDate} {
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			writeRPCError(w, req.ID, -32602, "start_date and end_date must be in YYYY-MM-DD format")
+			return
+		}
+	}
 
 	events, err := searchEvents(startDate, endDate)
 	if err != nil {
