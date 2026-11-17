@@ -58,22 +58,29 @@ type Event struct {
 
 // --- MongoDB connection ---
 
+const (
+	connectTimeout = 10 * time.Second
+	requestTimeout = 10 * time.Second
+)
+
 var (
 	col     *mongo.Collection
 	once    sync.Once
 	initErr error
 )
 
-func getCollection() (*mongo.Collection, error) {
+// getCollection lazily connects once. The connection context is detached from
+// ctx cancellation so one cancelled request cannot poison the shared singleton.
+func getCollection(ctx context.Context) (*mongo.Collection, error) {
 	once.Do(func() {
 		uri := os.Getenv("MONGODB_URI")
 		dbName := os.Getenv("MONGODB_DB")
 		if dbName == "" {
 			dbName = "calendar"
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		connCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), connectTimeout)
 		defer cancel()
-		client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+		client, err := mongo.Connect(connCtx, options.Client().ApplyURI(uri))
 		if err != nil {
 			initErr = err
 			return
@@ -169,14 +176,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		})
 
 	case "tools/call":
-		handleToolCall(w, req)
+		handleToolCall(r.Context(), w, req)
 
 	default:
 		writeRPCError(w, req.ID, -32601, "method not found")
 	}
 }
 
-func handleToolCall(w http.ResponseWriter, req rpcRequest) {
+func handleToolCall(ctx context.Context, w http.ResponseWriter, req rpcRequest) {
 	var params struct {
 		Name      string                 `json:"name"`
 		Arguments map[string]interface{} `json:"arguments"`
@@ -198,7 +205,7 @@ func handleToolCall(w http.ResponseWriter, req rpcRequest) {
 		return
 	}
 
-	events, err := searchEvents(startDate, endDate)
+	events, err := searchEvents(ctx, startDate, endDate)
 	if err != nil {
 		writeRPCError(w, req.ID, -32603, fmt.Sprintf("internal error: %s", err.Error()))
 		return
@@ -212,13 +219,13 @@ func handleToolCall(w http.ResponseWriter, req rpcRequest) {
 	})
 }
 
-func searchEvents(startDate, endDate string) ([]Event, error) {
-	c, err := getCollection()
+func searchEvents(ctx context.Context, startDate, endDate string) ([]Event, error) {
+	c, err := getCollection(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
 	// Match events that start within the date range (handles both timed and all-day events)

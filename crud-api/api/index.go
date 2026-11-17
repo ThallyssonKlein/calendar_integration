@@ -53,22 +53,29 @@ type Event struct {
 	Attendees        []Attendee `bson:"attendees,omitempty" json:"attendees,omitempty"`
 }
 
+const (
+	connectTimeout = 10 * time.Second
+	requestTimeout = 15 * time.Second
+)
+
 var (
 	col     *mongo.Collection
 	once    sync.Once
 	initErr error
 )
 
-func getCollection() (*mongo.Collection, error) {
+// getCollection lazily connects once. The connection context is detached from
+// ctx cancellation so one cancelled request cannot poison the shared singleton.
+func getCollection(ctx context.Context) (*mongo.Collection, error) {
 	once.Do(func() {
 		uri := os.Getenv("MONGODB_URI")
 		dbName := os.Getenv("MONGODB_DB")
 		if dbName == "" {
 			dbName = "calendar"
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		connCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), connectTimeout)
 		defer cancel()
-		client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+		client, err := mongo.Connect(connCtx, options.Client().ApplyURI(uri))
 		if err != nil {
 			initErr = err
 			return
@@ -112,7 +119,7 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c, err := getCollection()
+	c, err := getCollection(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -131,7 +138,7 @@ func batchUpsertEvents(w http.ResponseWriter, r *http.Request) {
 		models = append(models, m)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
 
 	upsertResult, err := c.BulkWrite(ctx, models)
